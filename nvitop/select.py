@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -62,14 +62,14 @@ import math
 import os
 import sys
 import warnings
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 from nvitop.api import Device, GpuProcess, Snapshot, colored, host, human2bytes, libnvml
 from nvitop.version import __version__
 
 
 if TYPE_CHECKING:
-    from typing_extensions import Literal  # Python 3.8+
+    from collections.abc import Callable, Iterable, Sequence
 
 
 __all__ = ['select_devices']
@@ -90,7 +90,6 @@ def select_devices(  # pylint: disable=too-many-arguments
     tolerance: int,
     free_accounts: list[str] | None,
     sort: bool,
-    **kwargs: Any,
 ) -> list[int] | list[tuple[int, int]]: ...
 
 
@@ -109,7 +108,6 @@ def select_devices(  # pylint: disable=too-many-arguments
     tolerance: int,
     free_accounts: list[str] | None,
     sort: bool,
-    **kwargs: Any,
 ) -> list[int] | list[tuple[int, int]]: ...
 
 
@@ -128,11 +126,11 @@ def select_devices(  # pylint: disable=too-many-arguments
     tolerance: int,
     free_accounts: list[str] | None,
     sort: bool,
-    **kwargs: Any,
 ) -> list[Device]: ...
 
 
-def select_devices(  # pylint: disable=too-many-branches,too-many-statements,too-many-locals,unused-argument,too-many-arguments
+# pylint: disable-next=too-many-branches,too-many-statements,too-many-locals,too-many-arguments
+def select_devices(
     devices: Iterable[Device] | None = None,
     *,
     format: Literal['index', 'uuid', 'device'] = 'index',  # pylint: disable=redefined-builtin
@@ -146,7 +144,6 @@ def select_devices(  # pylint: disable=too-many-branches,too-many-statements,too
     tolerance: int = 0,  # in percentage
     free_accounts: list[str] | None = None,
     sort: bool = True,
-    **kwargs: Any,
 ) -> list[int] | list[tuple[int, int]] | list[str] | list[Device]:
     """Select a subset of devices satisfying the specified criteria.
 
@@ -222,7 +219,7 @@ def select_devices(  # pylint: disable=too-many-branches,too-many-statements,too
     for device in devices:
         available_devices.extend(dev.as_snapshot() for dev in device.to_leaf_devices())
     for device in available_devices:
-        device.loosen_constraints = 0  # type: ignore[attr-defined]
+        device.loosen_constraints = 0
 
     if len(free_accounts) > 0:
         with GpuProcess.failsafe():
@@ -231,15 +228,15 @@ def select_devices(  # pylint: disable=too-many-branches,too-many-statements,too
                 for process in device.real.processes().values():
                     if process.username() in free_accounts:
                         as_free_memory += process.gpu_memory()
-                device.memory_free += as_free_memory  # type: ignore[attr-defined]
-                device.memory_used -= as_free_memory  # type: ignore[attr-defined]
+                device.memory_free += as_free_memory
+                device.memory_used -= as_free_memory
 
     def filter_func(
         criteria: Callable[[Snapshot], bool],
         original_criteria: Callable[[Snapshot], bool],
     ) -> Callable[[Snapshot], bool]:
         def wrapped(device: Snapshot) -> bool:
-            device.loosen_constraints += int(not original_criteria(device))  # type: ignore[attr-defined]
+            device.loosen_constraints += int(not original_criteria(device))
             return criteria(device)
 
         return wrapped
@@ -564,7 +561,19 @@ def main() -> int:
         )
         return 3
 
-    identifiers = select_devices(devices, **vars(args))
+    identifiers = select_devices(  # type: ignore[call-overload]
+        devices,
+        format=args.format,
+        min_count=args.min_count,
+        max_count=args.max_count,
+        min_free_memory=args.min_free_memory,
+        min_total_memory=args.min_total_memory,
+        max_gpu_utilization=args.max_gpu_utilization,
+        max_memory_utilization=args.max_memory_utilization,
+        tolerance=args.tolerance,
+        free_accounts=args.free_accounts,
+        sort=args.sort,
+    )
     identifiers = list(map(str, identifiers))
     result = args.sep.join(identifiers)
 

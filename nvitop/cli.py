@@ -10,7 +10,7 @@ import sys
 import textwrap
 
 from nvitop.api import HostProcess, libnvml
-from nvitop.gui import UI, USERNAME, Device, colored, libcurses, set_color, setlocale_utf8
+from nvitop.tui import TUI, USERNAME, Device, colored, libcurses, set_color, setlocale_utf8
 from nvitop.version import __version__
 
 
@@ -95,10 +95,10 @@ def parse_arguments() -> argparse.Namespace:
         help='Process status update interval in seconds. (default: 2)',
     )
     parser.add_argument(
-        '--ascii',
         '--no-unicode',
+        '--ascii',
         '-U',
-        dest='ascii',
+        dest='no_unicode',
         action='store_true',
         help='Use ASCII characters only, which is useful for terminals without Unicode support.',
     )
@@ -163,7 +163,7 @@ def parse_arguments() -> argparse.Namespace:
         dest='only',
         type=int,
         nargs='+',
-        metavar='idx',
+        metavar='INDEX',
         help='Only show the specified devices, suppress option `--only-visible`.',
     )
     device_filtering.add_argument(
@@ -294,7 +294,7 @@ def main() -> int:
         args.monitor = mode
 
     if not setlocale_utf8():
-        args.ascii = True
+        args.no_unicode = True
 
     try:
         device_count = Device.count()
@@ -345,26 +345,26 @@ def main() -> int:
         pids = set(args.pid)
         filters.append(lambda process: process.pid in pids)
 
-    ui = None
+    tui = None
     if hasattr(args, 'monitor') and len(devices) > 0:
         try:
             with libcurses(colorful=args.colorful, light_theme=args.light) as win:
-                ui = UI(
+                tui = TUI(
                     devices,
                     filters,
-                    ascii=args.ascii,
+                    no_unicode=args.no_unicode,
                     mode=args.monitor,
                     interval=args.interval,
                     win=win,
                 )
-                ui.loop()
+                tui.loop()
         except curses.error as ex:
-            if ui is not None:
+            if tui is not None:
                 raise
             messages.append(f'ERROR: Failed to initialize `curses` ({ex})')
 
-    if ui is None:
-        ui = UI(devices, filters, ascii=args.ascii)
+    if tui is None:
+        tui = TUI(devices, filters, no_unicode=args.no_unicode)
         if not sys.stdout.isatty():
             parent = HostProcess().parent()
             if parent is not None:
@@ -379,8 +379,8 @@ def main() -> int:
                         'Please try `nvitop -m` directly.',
                     )
 
-    ui.print()
-    ui.destroy()
+    tui.print()
+    tui.destroy()
 
     if len(libnvml.UNKNOWN_FUNCTIONS) > 0:
         unknown_function_messages = [
@@ -416,8 +416,8 @@ def main() -> int:
                 pip3 install --upgrade pipx
                 pipx run nvitop
             """,
-        )
-        messages.append(message.strip() + '\n')
+        ).strip()
+        messages.append(f'{message}\n')
 
     if len(messages) > 0:
         for message in messages:
@@ -425,7 +425,7 @@ def main() -> int:
                 if message.startswith(prefix):
                     message = message.replace(
                         prefix,
-                        colored(prefix, color=color, attrs=('bold',)),
+                        colored(prefix, color=color, attrs=('bold',)),  # type: ignore[arg-type]
                         1,
                     )
                     break

@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,11 +28,11 @@ import sys as _sys
 import threading as _threading
 from typing import TYPE_CHECKING as _TYPE_CHECKING
 from typing import Any as _Any
-from typing import Callable as _Callable
 from typing import ClassVar as _ClassVar
 
 
 if _TYPE_CHECKING:
+    from collections.abc import Callable as _Callable
     from typing_extensions import Self as _Self  # Python 3.11+
     from typing_extensions import TypeAlias as _TypeAlias  # Python 3.10+
 
@@ -277,7 +277,7 @@ class CUDAError(Exception):
         return CUDAError, (self.value,)  # pylint: disable=no-member
 
 
-def cudaExceptionClass(cudaErrorCode: int) -> type[CUDAError]:
+def cudaExceptionClass(cudaErrorCode: int, /) -> type[CUDAError]:
     """Map value to a proper subclass of :class:`CUDAError`.
 
     Raises:
@@ -348,7 +348,7 @@ _extract_cuda_errors_as_classes()
 del _extract_cuda_errors_as_classes
 
 
-def _cudaCheckReturn(ret: _Any) -> _Any:
+def _cudaCheckReturn(ret: _Any, /) -> _Any:
     if ret != CUDA_SUCCESS:
         raise CUDAError(ret)
     return ret
@@ -420,7 +420,7 @@ def __LoadCudaLibrary() -> None:
                         _itertools.chain.from_iterable((f'{lib}.1', lib) for lib in lib_filenames),
                     )
                 elif system == 'Windows':
-                    bits = _platform.architecture()[0].replace('bit', '')  # e.g., '64' or '32'
+                    bits = 8 * _ctypes.sizeof(_ctypes.c_void_p)  # 64 or 32
                     lib_filenames = [f'nvcuda{bits}.dll', 'nvcuda.dll']
                 # Open library
                 for lib_filename in lib_filenames:
@@ -522,7 +522,7 @@ def cuDriverGetVersion() -> str:
     """
     fn = __cudaGetFunctionPointer('cuDriverGetVersion')
 
-    driver_version = _ctypes.c_int()
+    driver_version = _ctypes.c_int(0)
     ret = fn(_ctypes.byref(driver_version))
     _cudaCheckReturn(ret)
     major = driver_version.value // 1000
@@ -733,7 +733,7 @@ def cuDeviceTotalMem(device: _c_CUdevice_t) -> int:
     """
     fn = __cudaGetFunctionPointer('cuDeviceTotalMem')
 
-    bytes = _ctypes.c_size_t()  # pylint: disable=redefined-builtin
+    bytes = _ctypes.c_size_t(0)  # pylint: disable=redefined-builtin
     ret = fn(_ctypes.byref(bytes), device)
     _cudaCheckReturn(ret)
     return bytes.value

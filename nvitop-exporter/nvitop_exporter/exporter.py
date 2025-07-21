@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,8 +24,7 @@ from typing import Sequence
 
 from prometheus_client import REGISTRY, CollectorRegistry, Gauge, Info
 
-from nvitop import Device, MiB, MigDevice, PhysicalDevice, host
-from nvitop.api.process import GpuProcess
+from nvitop import Device, GpuProcess, MiB, MigDevice, PhysicalDevice, host
 from nvitop_exporter.utils import get_ip_address
 
 
@@ -405,6 +404,12 @@ class PrometheusExporter:  # pylint: disable=too-many-instance-attributes
         )
 
         # Create gauges for process metrics
+        self.process_info = Info(
+            name='process_info',
+            documentation='Process information.',
+            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username'],
+            registry=self.registry,
+        )
         self.process_running_time = Gauge(
             name='process_running_time',
             documentation='Process running time (s).',
@@ -592,19 +597,39 @@ class PrometheusExporter:  # pylint: disable=too-many-instance-attributes
         alive_pids.clear()
 
         with GpuProcess.failsafe():
+            host_snapshots = {}
             for pid, process in device.processes().items():
                 with process.oneshot():
                     username = process.username()
-                    running_time = process.running_time()
-                    alive_pids.add((pid, username))
+                    if (pid, username) not in host_snapshots:  # noqa: SIM401,RUF100
+                        host_snapshot = host_snapshots[pid, username] = process.host_snapshot()
+                    else:
+                        host_snapshot = host_snapshots[pid, username]
+                    self.process_info.labels(
+                        hostname=self.hostname,
+                        index=index,
+                        devicename=name,
+                        uuid=uuid,
+                        pid=pid,
+                        username=username,
+                    ).info(
+                        {
+                            'status': host_snapshot.status,
+                            'command': host_snapshot.command,
+                        },
+                    )
                     for gauge, value in (
                         (
                             self.process_running_time,
-                            running_time.total_seconds() if running_time else math.nan,
+                            (
+                                host_snapshot.running_time.total_seconds()
+                                if host_snapshot.running_time
+                                else math.nan
+                            ),
                         ),
-                        (self.process_cpu_percent, process.cpu_percent()),
-                        (self.process_rss_memory, process.host_memory() / MiB),
-                        (self.process_memory_percent, float(process.memory_percent())),
+                        (self.process_cpu_percent, host_snapshot.cpu_percent),
+                        (self.process_rss_memory, host_snapshot.host_memory / MiB),
+                        (self.process_memory_percent, float(host_snapshot.memory_percent)),
                         (self.process_gpu_memory, process.gpu_memory() / MiB),
                         (
                             self.process_gpu_sm_utilization,
@@ -632,8 +657,10 @@ class PrometheusExporter:  # pylint: disable=too-many-instance-attributes
                             username=username,
                         ).set(value)
 
+        alive_pids.update(host_snapshots)
         for pid, username in previous_alive_pids.difference(alive_pids):
-            for gauge in (
+            for collector in (
+                self.process_info,
                 self.process_running_time,
                 self.process_cpu_percent,
                 self.process_rss_memory,
@@ -645,7 +672,7 @@ class PrometheusExporter:  # pylint: disable=too-many-instance-attributes
                 self.process_gpu_decoder_utilization,
             ):
                 try:
-                    gauge.remove(
+                    collector.remove(
                         self.hostname,
                         index,
                         name,

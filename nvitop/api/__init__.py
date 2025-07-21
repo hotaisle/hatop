@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,19 @@
 # ==============================================================================
 """The core APIs of nvitop."""
 
-from nvitop.api import collector, device, host, libcuda, libcudart, libnvml, process, utils
+from nvitop.api import (
+    caching,
+    collector,
+    device,
+    host,
+    libcuda,
+    libcudart,
+    libnvml,
+    process,
+    termcolor,
+    utils,
+)
+from nvitop.api.caching import ttl_cache
 from nvitop.api.collector import ResourceMetricCollector, collect_in_background, take_snapshots
 from nvitop.api.device import (
     CudaDevice,
@@ -53,7 +65,7 @@ from nvitop.api.utils import (  # explicitly export these to appease mypy
 )
 
 
-__all__ = [
+__all__ = [  # noqa: RUF022
     'NVMLError',
     'nvmlCheckReturn',
     'libnvml',
@@ -76,6 +88,8 @@ __all__ = [
     'take_snapshots',
     'collect_in_background',
     'ResourceMetricCollector',
+    # nvitop.api.caching
+    'ttl_cache',
     # nvitop.api.utils
     'NA',
     'NaType',

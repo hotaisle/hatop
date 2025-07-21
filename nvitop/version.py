@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@
 
 # pylint: disable=invalid-name
 
-__version__ = '1.3.2'
-__license__ = 'GPL-3.0-only AND Apache-2.0'
+__version__ = '1.5.1'
+__license__ = 'Apache-2.0 AND GPL-3.0-only'
 __author__ = __maintainer__ = 'Xuehai Pan'
 __email__ = 'XuehaiPan@pku.edu.cn'
 __release__ = False
@@ -28,11 +28,17 @@ if not __release__:
     import os
     import subprocess
 
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     try:
         prefix, sep, suffix = (
             subprocess.check_output(  # noqa: S603
-                ['git', 'describe', '--abbrev=7'],  # noqa: S607
-                cwd=os.path.dirname(os.path.abspath(__file__)),
+                [  # noqa: S607
+                    'git',
+                    f'--git-dir={os.path.join(root_dir, ".git")}',
+                    'describe',
+                    '--abbrev=7',
+                ],
+                cwd=root_dir,
                 stderr=subprocess.DEVNULL,
                 text=True,
             )
@@ -53,7 +59,8 @@ if not __release__:
     except (OSError, subprocess.CalledProcessError):
         pass
 
-    del os, subprocess
+    del os, subprocess, root_dir
+
 
 # The package `nvidia-ml-py` is not backward compatible over releases. This may
 # cause problems with Old versions of NVIDIA drivers.
@@ -80,6 +87,8 @@ PYNVML_VERSION_CANDIDATES = (
     '12.550.89',
     '12.555.43',
     '12.560.30',
+    '12.570.86',
+    '12.575.51',
 )
 """The list of supported ``nvidia-ml-py`` versions.
 See also: `nvidia-ml-py's Release History <https://pypi.org/project/nvidia-ml-py/#history>`_.

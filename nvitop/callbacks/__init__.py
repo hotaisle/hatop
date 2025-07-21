@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,3 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+
+# pylint: disable=missing-module-docstring
+
+import warnings
+
+
+warnings.warn(
+    f'The `{__name__}` module is deprecated '
+    'and will not be supported in the future. '
+    'Feel free to port and implement your own callback using `nvitop`.',
+    category=FutureWarning,
+    stacklevel=2,
+)

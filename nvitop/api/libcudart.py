@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,11 +28,11 @@ import sys as _sys
 import threading as _threading
 from typing import TYPE_CHECKING as _TYPE_CHECKING
 from typing import Any as _Any
-from typing import Callable as _Callable
 from typing import ClassVar as _ClassVar
 
 
 if _TYPE_CHECKING:
+    from collections.abc import Callable as _Callable
     from typing_extensions import Self as _Self  # Python 3.11+
 
 
@@ -325,7 +325,7 @@ class cudaError(Exception):
         return cudaError, (self.value,)  # pylint: disable=no-member
 
 
-def cudaExceptionClass(cudaErrorCode: int) -> type[cudaError]:
+def cudaExceptionClass(cudaErrorCode: int, /) -> type[cudaError]:
     """Map value to a proper subclass of :class:`cudaError`.
 
     Raises:
@@ -399,7 +399,7 @@ _extract_cuda_errors_as_classes()
 del _extract_cuda_errors_as_classes
 
 
-def _cudaCheckReturn(ret: _Any) -> _Any:
+def _cudaCheckReturn(ret: _Any, /) -> _Any:
     if ret != cudaSuccess:
         raise cudaError(ret)
     return ret
@@ -412,7 +412,7 @@ __libLoadLock: _threading.Lock = _threading.Lock()
 __cudaGetFunctionPointer_cache: dict[str, _ctypes._CFuncPtr] = {}  # type: ignore[name-defined]
 
 
-def __cudaGetFunctionPointer(name: str) -> _ctypes._CFuncPtr:  # type: ignore[name-defined]
+def __cudaGetFunctionPointer(name: str, /) -> _ctypes._CFuncPtr:  # type: ignore[name-defined]
     """Get the function pointer from the CUDA Runtime library.
 
     Raises:
@@ -451,7 +451,7 @@ def __LoadCudaLibrary() -> None:  # pylint: disable=too-many-branches
             if __cudaLib is None:  # pylint: disable=too-many-nested-blocks
                 # Platform specific libcudart location
                 system = _platform.system()
-                bits = _platform.architecture()[0].replace('bit', '')
+                bits = 8 * _ctypes.sizeof(_ctypes.c_void_p)  # 64 or 32
                 if system == 'Darwin':
                     lib_filenames = ['libcudart.dylib']
                 elif system == 'Linux':
@@ -614,7 +614,7 @@ def cudaDriverGetVersion() -> str:
     """
     fn = __cudaGetFunctionPointer('cudaDriverGetVersion')
 
-    driver_version = _ctypes.c_int()
+    driver_version = _ctypes.c_int(0)
     ret = fn(_ctypes.byref(driver_version))
     _cudaCheckReturn(ret)
     major = driver_version.value // 1000
@@ -638,7 +638,7 @@ def cudaRuntimeGetVersion() -> str:
     """
     fn = __cudaGetFunctionPointer('cudaRuntimeGetVersion')
 
-    runtime_version = _ctypes.c_int()
+    runtime_version = _ctypes.c_int(0)
     ret = fn(_ctypes.byref(runtime_version))
     _cudaCheckReturn(ret)
     major = runtime_version.value // 1000
@@ -695,7 +695,7 @@ def cudaDeviceGetByPCIBusId(pciBusId: str) -> int:
     """
     fn = __cudaGetFunctionPointer('cudaDeviceGetByPCIBusId')
 
-    device = _ctypes.c_int()
+    device = _ctypes.c_int(0)
     ret = fn(_ctypes.byref(device), _ctypes.c_char_p(pciBusId.encode('utf-8')))
     _cudaCheckReturn(ret)
     return device.value

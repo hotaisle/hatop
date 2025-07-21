@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,12 +29,16 @@ import re
 import sys
 import time
 from collections.abc import KeysView
-from typing import Any, Callable, Generator, Iterable, Iterator, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, TypeVar, final
 
-from psutil import WINDOWS
+from nvitop.api import termcolor
 
 
-__all__ = [
+if TYPE_CHECKING:
+    from collections.abc import Generator, Iterable, Iterator
+
+
+__all__ = [  # noqa: RUF022
     'NA',
     'NaType',
     'NotApplicable',
@@ -58,30 +62,6 @@ __all__ = [
 ]
 
 
-if WINDOWS:
-    try:
-        from colorama import init
-    except ImportError:
-        pass
-    else:
-        init()
-
-try:
-    from termcolor import colored as _colored
-except ImportError:
-
-    def _colored(  # type: ignore[misc] # pylint: disable=unused-argument,too-many-arguments
-        text: str,
-        color: str | None = None,
-        on_color: str | None = None,
-        attrs: Iterable[str] | None = None,
-        *,
-        no_color: bool | None = None,
-        force_color: bool | None = None,
-    ) -> str:
-        return text
-
-
 COLOR: bool = sys.stdout.isatty()
 
 
@@ -98,10 +78,11 @@ def set_color(value: bool) -> None:
 
 
 def colored(
-    text: str,
-    color: str | None = None,
-    on_color: str | None = None,
-    attrs: Iterable[str] | None = None,
+    text: Any,
+    /,
+    color: termcolor.Color | None = None,
+    on_color: termcolor.Highlight | None = None,
+    attrs: Iterable[termcolor.Attribute] | None = None,
 ) -> str:
     """Colorize text with ANSI color escape codes.
 
@@ -115,14 +96,17 @@ def colored(
         bold, dark, underline, blink, reverse, concealed.
 
     Examples:
-        >>> colored('Hello, World!', 'red', 'on_grey', ['blue', 'blink'])
-        >>> colored('Hello, World!', 'green')
+        >>> colored('Hello, World!', 'red', 'on_grey', ['bold', 'blink'])  # doctest: +ELLIPSIS
+        '...Hello, World!...'
+        >>> colored('Hello, World!', 'green')  # doctest: +ELLIPSIS
+        '...Hello, World!...'
     """
     if COLOR:
-        return _colored(text, color=color, on_color=on_color, attrs=attrs)  # type: ignore[arg-type]
-    return text
+        return termcolor.colored(text, color=color, on_color=on_color, attrs=attrs)
+    return str(text)
 
 
+@final
 class NaType(str):
     """A singleton (:const:`str: 'N/A'`) class represents a not applicable value.
 
@@ -153,12 +137,14 @@ class NaType(str):
         nan
     """
 
-    # NOTE: Decorate this class with `@final` and remove `noqa` when we drop Python 3.7 support.
-    def __new__(cls) -> NaType:  # noqa: PYI034
+    __slots__: ClassVar[tuple[()]] = ()
+
+    def __new__(cls) -> NaType:
         """Get the singleton instance (:const:`nvitop.NA`)."""
-        if not hasattr(cls, '_instance'):
-            cls._instance = super().__new__(cls, 'N/A')
-        return cls._instance
+        instance = getattr(cls, '_instance', None)
+        if instance is None:
+            cls._instance = instance = super().__new__(cls, 'N/A')
+        return instance
 
     def __bool__(self) -> bool:
         """Convert :const:`NA` to :class:`bool` and return :data:`False`.
@@ -225,9 +211,11 @@ class NaType(str):
         """Return :data:`math.nan` if the operand is a number (``NA - other``).
 
         >>> NA - 'str'
+        Traceback (most recent call last):
+            ...
         TypeError: unsupported operand type(s) for -: 'NaType' and 'str'
         >>> NA - NA
-        'N/AN/A'
+        nan
         >>> NA + 1
         nan
         >>> NA + 1.0
@@ -243,6 +231,8 @@ class NaType(str):
         """Return :data:`math.nan` if the operand is a number (``other - NA``).
 
         >>> 'str' - NA
+        Traceback (most recent call last):
+            ...
         TypeError: unsupported operand type(s) for -: 'str' and 'NaType'
         >>> 1 - NA
         nan
@@ -291,9 +281,13 @@ class NaType(str):
         >>> NA / 1024.0
         nan
         >>> NA / 0
-        ZeroDivisionError: float division by zero
+        Traceback (most recent call last):
+            ...
+        ZeroDivisionError: ...
         >>> NA / 0.0
-        ZeroDivisionError: float division by zero
+        Traceback (most recent call last):
+            ...
+        ZeroDivisionError: ...
         >>> NA / NA
         nan
         """
@@ -323,9 +317,13 @@ class NaType(str):
         >>> NA // 1024.0
         nan
         >>> NA / 0
-        ZeroDivisionError: float division by zero
+        Traceback (most recent call last):
+            ...
+        ZeroDivisionError: ...
         >>> NA / 0.0
-        ZeroDivisionError: float division by zero
+        Traceback (most recent call last):
+            ...
+        ZeroDivisionError: ...
         >>> NA // NA
         nan
         """
@@ -355,9 +353,13 @@ class NaType(str):
         >>> NA % 1024.0
         nan
         >>> NA % 0
-        ZeroDivisionError: float modulo
+        Traceback (most recent call last):
+            ...
+        ZeroDivisionError: ...
         >>> NA % 0.0
-        ZeroDivisionError: float modulo
+        Traceback (most recent call last):
+            ...
+        ZeroDivisionError: ...
         """
         if isinstance(other, (int, float)):
             return float(self) % other
@@ -385,9 +387,13 @@ class NaType(str):
         >>> divmod(NA, 1024.0)
         (nan, nan)
         >>> divmod(NA, 0)
-        ZeroDivisionError: float floor division by zero
+        Traceback (most recent call last):
+            ...
+        ZeroDivisionError: ...
         >>> divmod(NA, 0.0)
-        ZeroDivisionError: float floor division by zero
+        Traceback (most recent call last):
+            ...
+        ZeroDivisionError: ...
         """
         return (self // other, self % other)
 
@@ -426,7 +432,7 @@ class NaType(str):
         return abs(float(self))
 
     def __round__(self, ndigits: int | None = None) -> int | float:
-        """Round :const:`nvitop.NA` to ``ndigits`` decimal places, defaulting to :const:`0`.
+        """Round :const:`nvitop.NA` to ``ndigits`` decimal places, defaulting to :data:`None`.
 
         If ``ndigits`` is omitted or :data:`None`, returns :const:`0`, otherwise returns :data:`math.nan`.
 
@@ -479,9 +485,10 @@ NotApplicableType = NaType
 # NA == 'N/A'         -> True
 # NA is NaType()      -> True (`NaType` is a singleton class)
 NA = NaType()
-NA.__doc__ = """The singleton instance of :class:`NaType`. The actual value is :const:`str: 'N/A'`."""  # pylint: disable=attribute-defined-outside-init
+"""The singleton instance of :class:`NaType`. The actual value is :const:`str: 'N/A'`."""
 
 NotApplicable = NA
+"""The singleton instance of :class:`NaType`. The actual value is :const:`str: 'N/A'`."""
 
 UINT_MAX: int = ctypes.c_uint(-1).value  # 0xFFFFFFFF
 """The maximum value of :class:`ctypes.c_uint`."""
@@ -520,7 +527,7 @@ SIZE_UNITS: dict[str | None, int] = {
 }
 """Units of storage and memory measurements."""
 SIZE_PATTERN: re.Pattern = re.compile(
-    r'^\s*\+?\s*(?P<size>\d+(?:\.\d+)?)\s*(?P<unit>[KMGTP]i?B?|B?)\s*$',
+    r'^\s*\+?\s*(?P<size>\d+(?:\.\d+)?)\s*(?P<unit>([KMGTP]i?)?)B?\s*$',
     flags=re.IGNORECASE,
 )
 """The regex pattern for human readable size."""
@@ -529,6 +536,7 @@ SIZE_PATTERN: re.Pattern = re.compile(
 # pylint: disable-next=too-many-return-statements,too-many-branches
 def bytes2human(
     b: int | float | NaType,  # noqa: PYI041
+    /,
     *,
     min_unit: int = 1,
 ) -> str:
@@ -565,7 +573,7 @@ def bytes2human(
     return f'{round(b / PiB, 1):.1f}PiB'
 
 
-def human2bytes(s: int | str) -> int:
+def human2bytes(s: int | str, /) -> int:
     """Convert a human readable size string (*case insensitive*) to bytes.
 
     Raises:
@@ -573,6 +581,8 @@ def human2bytes(s: int | str) -> int:
             If cannot convert the given size string.
 
     Examples:
+        >>> human2bytes('200')
+        200
         >>> human2bytes('500B')
         500
         >>> human2bytes('10k')
@@ -591,16 +601,17 @@ def human2bytes(s: int | str) -> int:
             return s
         raise ValueError(f'Cannot convert {s!r} to bytes.')
 
-    match = SIZE_PATTERN.match(s)
+    match = SIZE_PATTERN.fullmatch(s)
     if match is None:
         raise ValueError(f'Cannot convert {s!r} to bytes.')
-    size, unit = match.groups()
-    unit = unit.upper().replace('I', 'i').replace('B', '') + 'B'
-    return int(float(size) * SIZE_UNITS[unit])
+    size, unit = match.group('size', 'unit')
+    unit = unit.upper().replace('I', 'i')
+    return int(float(size) * SIZE_UNITS[f'{unit}B'])
 
 
 def timedelta2human(
     dt: int | float | datetime.timedelta | NaType,  # noqa: PYI041
+    /,
     *,
     round: bool = False,  # pylint: disable=redefined-builtin
 ) -> str:
@@ -620,7 +631,7 @@ def timedelta2human(
     return '{:d}:{:02d}'.format(*divmod(seconds, 60))
 
 
-def utilization2string(utilization: int | float | NaType) -> str:  # noqa: PYI041
+def utilization2string(utilization: int | float | NaType, /) -> str:  # noqa: PYI041
     """Convert a utilization rate to string."""
     if utilization != NA:
         if isinstance(utilization, int):
@@ -630,7 +641,7 @@ def utilization2string(utilization: int | float | NaType) -> str:  # noqa: PYI04
     return NA
 
 
-def boolify(string: str, default: Any = None) -> bool:
+def boolify(string: str, /, default: Any = None) -> bool:
     """Convert the given value, usually a string, to boolean."""
     if string.lower() in {'true', 'yes', 'on', 'enabled', '1'}:
         return True
@@ -652,8 +663,8 @@ class Snapshot:
 
     def __init__(self, real: Any, **items: Any) -> None:
         """Initialize a new :class:`Snapshot` object with the given attributes."""
-        self.real = real
-        self.timestamp = time.time()
+        object.__setattr__(self, 'real', real)
+        object.__setattr__(self, 'timestamp', time.time())
         for key, value in items.items():
             setattr(self, key, value)
 
@@ -704,6 +715,15 @@ class Snapshot:
         """Support ``snapshot['name'] = value`` syntax."""
         setattr(self, name, value)
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Set or update a member of the instance.
+
+        If the attribute is not defined, set it to the snapshot object.
+        """
+        if name in ('real', 'timestamp'):
+            raise AttributeError(f'Cannot set attribute {name!r} of {self.__class__.__name__!r}')
+        super().__setattr__(name, value)
+
     def __iter__(self) -> Iterator[str]:
         """Support ``for name in snapshot`` syntax and ``*`` tuple unpack ``[*snapshot]`` syntax."""
 
@@ -722,7 +742,7 @@ Method = TypeVar('Method', bound=Callable[..., Any])
 
 
 # Modified from psutil (https://github.com/giampaolo/psutil)
-def memoize_when_activated(method: Method) -> Method:
+def memoize_when_activated(method: Method, /) -> Method:
     """A memoize decorator which is disabled by default.
 
     It can be activated and deactivated on request. For efficiency reasons it can be used only
@@ -730,7 +750,7 @@ def memoize_when_activated(method: Method) -> Method:
     """
 
     @functools.wraps(method)
-    def wrapped(self: object, *args: Any, **kwargs: Any) -> Any:
+    def wrapped(self: object, /, *args: Any, **kwargs: Any) -> Any:
         try:
             # case 1: we previously entered oneshot() ctx
             # pylint: disable-next=protected-access
@@ -771,3 +791,9 @@ def memoize_when_activated(method: Method) -> Method:
     wrapped.cache_activate = cache_activate  # type: ignore[attr-defined]
     wrapped.cache_deactivate = cache_deactivate  # type: ignore[attr-defined]
     return wrapped  # type: ignore[return-value]
+
+
+if __name__ == '__main__':
+    import doctest
+
+    doctest.testmod()

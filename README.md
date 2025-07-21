@@ -2,7 +2,7 @@
 
 <!-- markdownlint-disable html -->
 
-![Python 3.7+](https://img.shields.io/badge/Python-3.7%2B-brightgreen)
+![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-brightgreen)
 [![PyPI](https://img.shields.io/pypi/v/nvitop?label=pypi&logo=pypi)](https://pypi.org/project/nvitop)
 [![conda-forge](https://img.shields.io/conda/vn/conda-forge/nvitop?label=conda&logo=condaforge)](https://anaconda.org/conda-forge/nvitop)
 [![Documentation Status](https://img.shields.io/readthedocs/nvitop?label=docs&logo=readthedocs)](https://nvitop.readthedocs.io)
@@ -20,6 +20,14 @@ An interactive NVIDIA-GPU process viewer and beyond, the one-stop solution for G
   (TERM: GNOME Terminal / OS: Ubuntu 16.04 LTS (over SSH) / Locale: <code>en_US.UTF-8</code>)
 </p>
 
+<p align="center">
+  <a href="./nvitop-exporter">
+    <img width="100%" src="https://github.com/user-attachments/assets/e4867e64-2ca9-45bc-b524-929053f9673d" alt="Grafana Dashboard">
+  </a>
+  <br/>
+  A Grafana dashboard built on top of <code>nvitop-exporter</code>.
+</p>
+
 ### Table of Contents  <!-- omit in toc --> <!-- markdownlint-disable heading-increment -->
 
 - [Features](#features)
@@ -33,7 +41,7 @@ An interactive NVIDIA-GPU process viewer and beyond, the one-stop solution for G
     - [Command Line Options and Environment Variables](#command-line-options-and-environment-variables)
     - [Keybindings for Monitor Mode](#keybindings-for-monitor-mode)
   - [CUDA Visible Devices Selection Tool](#cuda-visible-devices-selection-tool)
-  - [Callback Functions for Machine Learning Frameworks](#callback-functions-for-machine-learning-frameworks)
+  - [Callback Functions for Machine Learning Frameworks (DEPRECATED)](#callback-functions-for-machine-learning-frameworks-deprecated)
     - [Callback for TensorFlow (Keras)](#callback-for-tensorflow-keras)
     - [Callback for PyTorch Lightning](#callback-for-pytorch-lightning)
     - [TensorBoard Integration](#tensorboard-integration)
@@ -103,12 +111,10 @@ An interactive NVIDIA-GPU process viewer and beyond, the one-stop solution for G
 
 ## Requirements
 
-- Python 3.7+
+- Python 3.8+
 - NVIDIA Management Library (NVML)
 - nvidia-ml-py
 - psutil
-- cachetools
-- termcolor
 - curses<sup>[*](#curses)</sup> (with `libncursesw`)
 
 **NOTE:** The [NVIDIA Management Library (*NVML*)](https://developer.nvidia.com/nvidia-management-library-nvml) is a C-based programmatic interface for monitoring and managing various states. The runtime version of the NVML library ships with the NVIDIA display driver (available at [Download Drivers | NVIDIA](https://www.nvidia.com/Download/index.aspx)), or can be downloaded as part of the NVIDIA CUDA Toolkit (available at [CUDA Toolkit | NVIDIA Developer](https://developer.nvidia.com/cuda-downloads)). The lists of OS platforms and NVIDIA-GPUs supported by the NVML library can be found in the [NVML API Reference](https://docs.nvidia.com/deploy/nvml-api/nvml-api-reference.html).
@@ -140,10 +146,12 @@ Run `bash install-nvidia-driver.sh --help` for more information.
 
 ## Installation
 
-**It is highly recommended to install `nvitop` in an isolated virtual environment.** Simple installation and run via [`pipx`](https://pypa.github.io/pipx):
+**It is highly recommended to install `nvitop` in an isolated virtual environment.** Simple installation and run via [`pipx`](https://pypa.github.io/pipx) or [`uvx`](https://docs.astral.sh/uv/guides/tools) (a.k.a. `uv tool run`):
 
 ```bash
 pipx run nvitop
+# or
+uvx nvitop
 ```
 
 You can also set this command as an alias in your shell startup file, e.g.:
@@ -164,6 +172,24 @@ New-Item -Path (Split-Path -Parent -Path $PROFILE.CurrentUserAllHosts) -ItemType
 'Function nvitop { pipx run nvitop @Args }' >> $PROFILE.CurrentUserAllHosts
 ```
 
+or
+
+```bash
+# For Bash
+echo 'alias nvitop="uvx nvitop"' >> ~/.bashrc
+
+# For Zsh
+echo 'alias nvitop="uvx nvitop"' >> ~/.zshrc
+
+# For Fish
+mkdir -p ~/.config/fish
+echo 'alias nvitop="uvx nvitop"' >> ~/.config/fish/config.fish
+
+# For PowerShell
+New-Item -Path (Split-Path -Parent -Path $PROFILE.CurrentUserAllHosts) -ItemType Directory -Force
+'Function nvitop { uvx nvitop @Args }' >> $PROFILE.CurrentUserAllHosts
+```
+
 Install from PyPI ([![PyPI](https://img.shields.io/pypi/v/nvitop?label=pypi&logo=pypi)](https://pypi.org/project/nvitop)):
 
 ```bash
@@ -176,7 +202,7 @@ Install from conda-forge ([![conda-forge](https://img.shields.io/conda/v/conda-f
 conda install -c conda-forge nvitop
 ```
 
-Install the latest version from GitHub (![Commit Count](https://img.shields.io/github/commits-since/XuehaiPan/nvitop/v1.3.2)):
+Install the latest version from GitHub (![Commit Count](https://img.shields.io/github/commits-since/XuehaiPan/nvitop/v1.5.1)):
 
 ```bash
 pip3 install --upgrade pip setuptools
@@ -284,7 +310,7 @@ Press <kbd>h</kbd> for help or <kbd>q</kbd> to return to the terminal. See [Keyb
 
 #### For Docker Users
 
-Build and run the Docker image using [nvidia-docker](https://github.com/NVIDIA/nvidia-docker):
+Build and run the Docker image with [nvidia-container-toolkit](https://github.com/NVIDIA/nvidia-container-toolkit):
 
 ```bash
 git clone --depth=1 https://github.com/XuehaiPan/nvitop.git && cd nvitop  # clone this repo first
@@ -292,9 +318,15 @@ docker build --tag nvitop:latest .  # build the Docker image
 docker run -it --rm --runtime=nvidia --gpus=all --pid=host nvitop:latest  # run the Docker container
 ```
 
-The [`Dockerfile`](Dockerfile) has an optional build argument `basetag` (default: `450-signed-ubuntu22.04`) for the tag of image [`nvcr.io/nvidia/driver`](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/driver/tags).
-
 **NOTE:** Don't forget to add the `--pid=host` option when running the container.
+
+If you only need to set up the Grafana dashboard, you can start a dashboard at [`http://localhost:3000`](http://localhost:3000) with the following command:
+
+```bash
+docker compose --project-directory=nvitop-exporter/grafana up --build --detach
+```
+
+See [`nvitop-exporter`](./nvitop-exporter/README.md) for more details.
 
 #### For SSH Users
 
@@ -315,7 +347,7 @@ Type `nvitop --help` for more command options:
 usage: nvitop [--help] [--version] [--once | --monitor [{auto,full,compact}]]
               [--interval SEC] [--ascii] [--colorful] [--force-color] [--light]
               [--gpu-util-thresh th1 th2] [--mem-util-thresh th1 th2]
-              [--only idx [idx ...]] [--only-visible]
+              [--only INDEX [INDEX ...]] [--only-visible]
               [--compute] [--only-compute] [--graphics] [--only-graphics]
               [--user [USERNAME ...]] [--pid PID [PID ...]]
 
@@ -351,7 +383,7 @@ coloring:
                         ( 1 <= th1 < th2 <= 99, defaults: 10 80 )
 
 device filtering:
-  --only idx [idx ...], -o idx [idx ...]
+  --only INDEX [INDEX ...], -o INDEX [INDEX ...]
                         Only show the specified devices, suppress option `--only-visible`.
   --only-visible, -ov   Only show devices in the `CUDA_VISIBLE_DEVICES` environment variable.
 
@@ -574,7 +606,7 @@ formatting:
 
 ------
 
-### Callback Functions for Machine Learning Frameworks
+### Callback Functions for Machine Learning Frameworks (DEPRECATED)
 
 `nvitop` provides two builtin callbacks for [TensorFlow (Keras)](https://www.tensorflow.org) and [PyTorch Lightning](https://pytorchlightning.ai).
 
@@ -1435,7 +1467,7 @@ nvitop           (GPL-3.0)
 ├── select.py    (Apache-2.0)
 ├── __main__.py  (GPL-3.0)
 ├── cli.py       (GPL-3.0)
-└── gui          (GPL-3.0)
+└── tui          (GPL-3.0)
     ├── COPYING  (GPL-3.0)
     └── *        (GPL-3.0)
 ```
@@ -1456,13 +1488,13 @@ from nvitop import Device, ResourceMetricCollector
 
 The public APIs from `nvitop` are released under the **Apache License, Version 2.0 (Apache-2.0)**. The original license files can be found at [LICENSE](https://github.com/XuehaiPan/nvitop/blob/HEAD/LICENSE), [nvitop/api/LICENSE](https://github.com/XuehaiPan/nvitop/blob/HEAD/nvitop/api/LICENSE), and [nvitop/callbacks/LICENSE](https://github.com/XuehaiPan/nvitop/blob/HEAD/nvitop/callbacks/LICENSE).
 
-The CLI of `nvitop` is released under the **GNU General Public License, Version 3 (GPL-3.0)**. The original license files can be found at [COPYING](https://github.com/XuehaiPan/nvitop/blob/HEAD/COPYING) and [nvitop/gui/COPYING](https://github.com/XuehaiPan/nvitop/blob/HEAD/nvitop/gui/COPYING). If you dynamically load the source code of `nvitop`'s CLI or GUI:
+The CLI of `nvitop` is released under the **GNU General Public License, Version 3 (GPL-3.0)**. The original license files can be found at [COPYING](https://github.com/XuehaiPan/nvitop/blob/HEAD/COPYING) and [nvitop/tui/COPYING](https://github.com/XuehaiPan/nvitop/blob/HEAD/nvitop/tui/COPYING). If you dynamically load the source code of `nvitop`'s CLI or TUI:
 
 ```python
 from nvitop import cli
-from nvitop import gui
+from nvitop import tui
 import nvitop.cli
-import nvitop.gui
+import nvitop.tui
 ```
 
 your source code should also be released under the GPL-3.0 License.

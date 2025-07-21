@@ -13,6 +13,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+-
+
+### Changed
+
+-
+
+### Fixed
+
+-
+
+### Removed
+
+-
+
+------
+
+## [1.5.1] - 2025-05-26
+
+### Added
+
+- Add `docker-compose` template for `nvitop-exporter` by [@gianfranco-s](https://github.com/gianfranco-s) in [#159](https://github.com/XuehaiPan/nvitop/pull/159).
+
+### Fixed
+
+- Fix one-time output rendering on exit for TUI by [@XuehaiPan](https://github.com/XuehaiPan).
+
+------
+
+## [1.5.0] - 2025-04-25
+
+### Added
+
+- Show `%GMBW` in main screen by [@XuehaiPan](https://github.com/XuehaiPan) in [#156](https://github.com/XuehaiPan/nvitop/pull/156).
+- Add doctests and add type annotations in `nvitop.tui` by [@XuehaiPan](https://github.com/XuehaiPan) in [#164](https://github.com/XuehaiPan/nvitop/pull/164).
+
+### Changed
+
+- Deprecate `nvitop.callbacks` as officially unmaintained by [@XuehaiPan](https://github.com/XuehaiPan) in [#157](https://github.com/XuehaiPan/nvitop/pull/157).
+
+### Fixed
+
+- Ignore errors when collecting host metrics for host panel by [@XuehaiPan](https://github.com/XuehaiPan) in [#163](https://github.com/XuehaiPan/nvitop/pull/163).
+
+### Removed
+
+- Drop Python 3.7 support by [@XuehaiPan](https://github.com/XuehaiPan) in [#150](https://github.com/XuehaiPan/nvitop/pull/150).
+
+------
+
+## [1.4.2] - 2025-01-27
+
+### Removed
+
+- Vendor third-party dependency `termcolor` by [@XuehaiPan](https://github.com/XuehaiPan) in [#148](https://github.com/XuehaiPan/nvitop/pull/148).
+- Remove third-party dependency `cachetools` by [@XuehaiPan](https://github.com/XuehaiPan) in [#147](https://github.com/XuehaiPan/nvitop/pull/147).
+
+------
+
+## [1.4.1] - 2025-01-13
+
+### Fixed
+
+- Fix passing invalid device handle (e.g., GPU is lost) to NVML functions by [@XuehaiPan](https://github.com/XuehaiPan) in [#146](https://github.com/XuehaiPan/nvitop/pull/146).
+- Fix CUDA device selection tool `nvisel` by [@XuehaiPan](https://github.com/XuehaiPan).
+
+------
+
+## [1.4.0] - 2024-12-29
+
+### Added
+
+- Add Grafana dashboard for `nvitop-exporter` by [@XuehaiPan](https://github.com/XuehaiPan) in [#138](https://github.com/XuehaiPan/nvitop/pull/138).
 - Handle exceptions for function `getpass.getuser()` by [@XuehaiPan](https://github.com/XuehaiPan) in [#130](https://github.com/XuehaiPan/nvitop/pull/130). Issued by [@landgraf](https://github.com/landgraf).
 
 ### Changed
@@ -23,10 +95,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix documentation for the `ResourceMetricCollector.clear()` method by [@MyGodItsFull0fStars](https://github.com/MyGodItsFull0fStars) in [#132](https://github.com/XuehaiPan/nvitop/pull/132).
 - Gracefully ignore UTF-8 decoding errors by [@XuehaiPan](https://github.com/XuehaiPan).
-
-### Removed
-
--
 
 ------
 
@@ -128,7 +196,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ------
 
-[Unreleased]: https://github.com/XuehaiPan/nvitop/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/XuehaiPan/nvitop/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/XuehaiPan/nvitop/releases/tag/v1.5.1
+[1.5.0]: https://github.com/XuehaiPan/nvitop/releases/tag/v1.5.0
+[1.4.2]: https://github.com/XuehaiPan/nvitop/releases/tag/v1.4.2
+[1.4.1]: https://github.com/XuehaiPan/nvitop/releases/tag/v1.4.1
+[1.4.0]: https://github.com/XuehaiPan/nvitop/releases/tag/v1.4.0
 [1.3.2]: https://github.com/XuehaiPan/nvitop/releases/tag/v1.3.2
 [1.3.1]: https://github.com/XuehaiPan/nvitop/releases/tag/v1.3.1
 [1.3.0]: https://github.com/XuehaiPan/nvitop/releases/tag/v1.3.0

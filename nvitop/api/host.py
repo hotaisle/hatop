@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,42 +23,45 @@ utilization (CPU, memory, disks, network, sensors) in Python.
 from __future__ import annotations
 
 import os as _os
-from typing import Callable as _Callable
 
 import psutil as _psutil
 from psutil import *  # noqa: F403 # pylint: disable=wildcard-import,unused-wildcard-import,redefined-builtin
+from psutil import (  # noqa: F401
+    LINUX,
+    MACOS,
+    POSIX,
+    WINDOWS,
+    AccessDenied,
+    Error,
+    NoSuchProcess,
+    Process,
+    ZombieProcess,
+    boot_time,
+    cpu_percent,
+    pids,
+    swap_memory,
+    virtual_memory,
+)
+from psutil import Error as PsutilError  # pylint: disable=reimported
 
 
-__all__ = [name for name in _psutil.__all__ if not name.startswith('_')] + [
+__all__ = [
+    'WINDOWS_SUBSYSTEM_FOR_LINUX',
+    'WSL',
+    'PsutilError',
     'getuser',
     'hostname',
     'load_average',
-    'uptime',
     'memory_percent',
-    'swap_percent',
     'ppid_map',
     'reverse_ppid_map',
-    'WSL',
-    'WINDOWS_SUBSYSTEM_FOR_LINUX',
+    'swap_percent',
+    'uptime',
 ]
-__all__[__all__.index('Error')] = 'PsutilError'
+__all__ += [name for name in _psutil.__all__ if not name.startswith('_') and name != 'Error']
 
 
-PsutilError = Error = _psutil.Error  # make alias
-del Error
-
-
-cpu_percent = _psutil.cpu_percent
-virtual_memory = _psutil.virtual_memory
-swap_memory = _psutil.swap_memory
-Process = _psutil.Process
-NoSuchProcess = _psutil.NoSuchProcess
-ZombieProcess = _psutil.ZombieProcess
-AccessDenied = _psutil.AccessDenied
-POSIX = _psutil.POSIX
-WINDOWS = _psutil.WINDOWS
-LINUX = _psutil.LINUX
-MACOS = _psutil.MACOS
+del Error  # renamed to PsutilError
 
 
 def getuser() -> str:
@@ -95,7 +98,7 @@ def uptime() -> float:
     """Get the system uptime."""
     import time as _time  # pylint: disable=import-outside-toplevel
 
-    return _time.time() - _psutil.boot_time()
+    return _time.time() - boot_time()
 
 
 def memory_percent() -> float:
@@ -108,19 +111,32 @@ def swap_percent() -> float:
     return swap_memory().percent
 
 
-ppid_map: _Callable[[], dict[int, int]] = _psutil._ppid_map  # pylint: disable=protected-access
-"""Obtain a ``{pid: ppid, ...}`` dict for all running processes in one shot."""
+def ppid_map() -> dict[int, int]:
+    """Obtain a ``{pid: ppid, ...}`` dict for all running processes in one shot."""
+    ret = {}
+    for pid in pids():
+        try:
+            ret[pid] = Process(pid).ppid()
+        except (NoSuchProcess, ZombieProcess):  # noqa: PERF203
+            pass
+    return ret
 
 
-def reverse_ppid_map() -> dict[int, list[int]]:  # pylint: disable=function-redefined
+try:
+    from psutil import _ppid_map as ppid_map  # type: ignore[no-redef] # noqa: F811,RUF100
+except ImportError:
+    pass
+
+
+def reverse_ppid_map() -> dict[int, list[int]]:
     """Obtain a ``{ppid: [pid, ...], ...}`` dict for all running processes in one shot."""
     from collections import defaultdict  # pylint: disable=import-outside-toplevel
 
-    tree = defaultdict(list)
+    ret = defaultdict(list)
     for pid, ppid in ppid_map().items():
-        tree[ppid].append(pid)
+        ret[ppid].append(pid)
 
-    return tree
+    return ret
 
 
 if LINUX:

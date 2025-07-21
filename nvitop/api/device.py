@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -115,7 +115,7 @@ import textwrap
 import threading
 import time
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generator, Iterable, NamedTuple, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, NamedTuple, overload
 
 from nvitop.api import libcuda, libcudart, libnvml, libasmi
 from nvitop.api.process import GpuProcess
@@ -131,20 +131,18 @@ from nvitop.api.utils import (
 
 
 if TYPE_CHECKING:
-    from collections.abc import Hashable
-
-    from typing_extensions import Literal  # Python 3.8+
+    from collections.abc import Callable, Generator, Hashable, Iterable
     from typing_extensions import Self  # Python 3.11+
 
 
 __all__ = [
-    'Device',
-    'PhysicalDevice',
-    'MigDevice',
     'CudaDevice',
     'CudaMigDevice',
-    'parse_cuda_visible_devices',
+    'Device',
+    'MigDevice',
+    'PhysicalDevice',
     'normalize_cuda_visible_devices',
+    'parse_cuda_visible_devices',
 ]
 
 # Class definitions ################################################################################
@@ -265,7 +263,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
     # GPU UUID        : `GPU-<GPU-UUID>`
     # MIG UUID        : `MIG-GPU-<GPU-UUID>/<GPU instance ID>/<compute instance ID>`
     # MIG UUID (R470+): `MIG-<MIG-UUID>`
-    UUID_PATTERN: re.Pattern = re.compile(
+    UUID_PATTERN: ClassVar[re.Pattern] = re.compile(
         r"""^  # full match
         (?:(?P<MigMode>MIG)-)?                                 # prefix for MIG UUID
         (?:(?P<GpuUuid>GPU)-)?                                 # prefix for GPU UUID
@@ -282,8 +280,8 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         flags=re.VERBOSE,
     )
 
-    GPU_PROCESS_CLASS: type[GpuProcess] = GpuProcess
-    cuda: type[CudaDevice] = None  # type: ignore[assignment] # defined in below
+    GPU_PROCESS_CLASS: ClassVar[type[GpuProcess]] = GpuProcess
+    cuda: ClassVar[type[CudaDevice]] = None  # type: ignore[assignment] # defined in below
     """Shortcut for class :class:`CudaDevice`."""
 
     _nvml_index: int | tuple[int, int]
@@ -413,7 +411,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
     def from_indices(
         cls,
         indices: int | Iterable[int | tuple[int, int]] | None = None,
-    ) -> list[PhysicalDevice | MigDevice]:
+    ) -> list[Self]:
         """Return a list of devices of the given indices.
 
         Args:
@@ -448,7 +446,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         if isinstance(indices, int):
             indices = [indices]
 
-        return list(map(cls, indices))  # type: ignore[arg-type]
+        return list(map(cls, indices))
 
     @staticmethod
     def from_cuda_visible_devices() -> list[CudaDevice]:
@@ -476,9 +474,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         return cuda_devices
 
     @staticmethod
-    def from_cuda_indices(
-        cuda_indices: int | Iterable[int] | None = None,
-    ) -> list[CudaDevice]:
+    def from_cuda_indices(cuda_indices: int | Iterable[int] | None = None) -> list[CudaDevice]:
         """Return a list of CUDA devices of the given CUDA indices.
 
         The CUDA ordinal will be enumerate from the ``CUDA_VISIBLE_DEVICES`` environment variable.
@@ -862,7 +858,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
             return self._nvml_index  # type: ignore[return-value] # will be overridden in MigDevice
 
     @property
-    def handle(self) -> libnvml.c_nvmlDevice_t:
+    def handle(self) -> libnvml.c_nvmlDevice_t | None:
         """The NVML device handle."""
         return self._handle
 
@@ -964,7 +960,9 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
 
             nvidia-smi --id=<IDENTIFIER> --format=csv,noheader,nounits --query-gpu=serial
         """
-        return libnvml.nvmlQuery('nvmlDeviceGetSerial', self.handle)
+        if self._handle is not None:
+            return libnvml.nvmlQuery('nvmlDeviceGetSerial', self._handle)
+        return NA
 
     @memoize_when_activated
     def memory_info(self) -> MemoryInfo:  # in bytes
@@ -1059,12 +1057,9 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         Returns: Union[float, NaType]
             The percentage of used memory over total memory, or :const:`nvitop.NA` when not applicable.
         """
-        memory_info = self.memory_info()
-        if libnvml.nvmlCheckReturn(memory_info.used, int) and libnvml.nvmlCheckReturn(
-            memory_info.total,
-            int,
-        ):
-            return round(100.0 * memory_info.used / memory_info.total, 1)
+        total, _, used = self.memory_info()
+        if libnvml.nvmlCheckReturn(used, int) and libnvml.nvmlCheckReturn(total, int):
+            return round(100.0 * used / total, 1)
         return NA
 
     def memory_usage(self) -> str:  # string of used memory over total memory (in human readable)
@@ -1082,13 +1077,14 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         Returns: MemoryInfo(total, free, used)
             A named tuple with BAR1 memory information, the item could be :const:`nvitop.NA` when not applicable.
         """  # pylint: disable=line-too-long
-        memory_info = libnvml.nvmlQuery('nvmlDeviceGetBAR1MemoryInfo', self.handle)
-        if libnvml.nvmlCheckReturn(memory_info):
-            return MemoryInfo(
-                total=memory_info.bar1Total,
-                free=memory_info.bar1Free,
-                used=memory_info.bar1Used,
-            )
+        if self._handle is not None:
+            memory_info = libnvml.nvmlQuery('nvmlDeviceGetBAR1MemoryInfo', self._handle)
+            if libnvml.nvmlCheckReturn(memory_info):
+                return MemoryInfo(
+                    total=memory_info.bar1Total,
+                    free=memory_info.bar1Free,
+                    used=memory_info.bar1Used,
+                )
         return MemoryInfo(total=NA, free=NA, used=NA)
 
     def bar1_memory_total(self) -> int | NaType:  # in bytes
@@ -1145,12 +1141,9 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         Returns: Union[float, NaType]
             The percentage of used BAR1 memory over total BAR1 memory, or :const:`nvitop.NA` when not applicable.
         """  # pylint: disable=line-too-long
-        memory_info = self.bar1_memory_info()
-        if libnvml.nvmlCheckReturn(memory_info.used, int) and libnvml.nvmlCheckReturn(
-            memory_info.total,
-            int,
-        ):
-            return round(100.0 * memory_info.used / memory_info.total, 1)
+        total, _, used = self.bar1_memory_info()
+        if libnvml.nvmlCheckReturn(used, int) and libnvml.nvmlCheckReturn(total, int):
+            return round(100.0 * used / total, 1)
         return NA
 
     def bar1_memory_usage(self) -> str:  # in human readable
@@ -1176,11 +1169,16 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
             if libnvml.nvmlCheckReturn(utilization_rates):
                 gpu, memory = utilization_rates.gpu, utilization_rates.memory
 
-            encoder_utilization = libnvml.nvmlQuery('nvmlDeviceGetEncoderUtilization', self.handle)
+        if self._handle is not None:
+            utilization_rates = libnvml.nvmlQuery('nvmlDeviceGetUtilizationRates', self._handle)
+            if libnvml.nvmlCheckReturn(utilization_rates):
+                gpu, memory = utilization_rates.gpu, utilization_rates.memory
+
+            encoder_utilization = libnvml.nvmlQuery('nvmlDeviceGetEncoderUtilization', self._handle)
             if libnvml.nvmlCheckReturn(encoder_utilization, list) and len(encoder_utilization) > 0:
                 encoder = encoder_utilization[0]
 
-            decoder_utilization = libnvml.nvmlQuery('nvmlDeviceGetDecoderUtilization', self.handle)
+            decoder_utilization = libnvml.nvmlQuery('nvmlDeviceGetDecoderUtilization', self._handle)
             if libnvml.nvmlCheckReturn(decoder_utilization, list) and len(decoder_utilization) > 0:
                 decoder = decoder_utilization[0]
 
@@ -1594,22 +1592,19 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         Returns: Union[int, NaType]
             The number of NVLinks that the GPU has.
         """
-        if self._nvlink_link_count is None:
+        if self._handle is not None and self._nvlink_link_count is None:
             ((nvlink_link_count, _),) = libnvml.nvmlQueryFieldValues(
-                self.handle,
+                self._handle,
                 [libnvml.NVML_FI_DEV_NVLINK_LINK_COUNT],
             )
             if libnvml.nvmlCheckReturn(nvlink_link_count, int):
                 self._nvlink_link_count = nvlink_link_count  # type: ignore[assignment]
-            else:
-                self._nvlink_link_count = 0
-        return self._nvlink_link_count  # type: ignore[return-value]
+        if self._nvlink_link_count is None:
+            self._nvlink_link_count = 0
+        return self._nvlink_link_count
 
     @memoize_when_activated
-    def nvlink_throughput(
-        self,
-        interval: float | None = None,
-    ) -> list[ThroughputInfo]:  # in KiB/s
+    def nvlink_throughput(self, interval: float | None = None) -> list[ThroughputInfo]:  # in KiB/s
         """The current NVLink throughput for each NVLink in KiB/s.
 
         This function is querying data counters between methods calls and thus is the NVLink
@@ -1627,14 +1622,18 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
             A list of named tuples with current NVLink throughput for each NVLink in KiB/s, the item
             could be :const:`nvitop.NA` when not applicable.
         """
+        if self._handle is None:
+            return []
+
         nvlink_link_count = self.nvlink_link_count()
         if nvlink_link_count == 0:
             return []
 
         def query_nvlink_throughput_counters() -> tuple[tuple[int | NaType, int]]:
+            assert self._handle is not None
             return tuple(  # type: ignore[return-value]
                 libnvml.nvmlQueryFieldValues(
-                    self.handle,
+                    self._handle,
                     [  # type: ignore[arg-type]
                         (libnvml.NVML_FI_DEV_NVLINK_THROUGHPUT_DATA_TX, i)
                         for i in range(nvlink_link_count)
@@ -1684,10 +1683,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
             for tx, rx in zip(throughputs[:nvlink_link_count], throughputs[nvlink_link_count:])
         ]
 
-    def nvlink_total_throughput(
-        self,
-        interval: float | None = None,
-    ) -> ThroughputInfo:  # in KiB/s
+    def nvlink_total_throughput(self, interval: float | None = None) -> ThroughputInfo:  # in KiB/s
         """The total NVLink throughput for all NVLinks in KiB/s.
 
         This function is querying data counters between methods calls and thus is the NVLink
@@ -1717,10 +1713,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
             rx=sum(rx_throughputs) if rx_throughputs else NA,
         )
 
-    def nvlink_mean_throughput(
-        self,
-        interval: float | None = None,
-    ) -> ThroughputInfo:  # in KiB/s
+    def nvlink_mean_throughput(self, interval: float | None = None) -> ThroughputInfo:  # in KiB/s
         """The mean NVLink throughput for all NVLinks in KiB/s.
 
         This function is querying data counters between methods calls and thus is the NVLink
@@ -1750,10 +1743,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
             rx=round(sum(rx_throughputs) / len(rx_throughputs)) if rx_throughputs else NA,
         )
 
-    def nvlink_tx_throughput(
-        self,
-        interval: float | None = None,
-    ) -> list[int | NaType]:  # in KiB/s
+    def nvlink_tx_throughput(self, interval: float | None = None) -> list[int | NaType]:  # in KiB/s
         """The current NVLink transmit data throughput in KiB/s for each NVLink.
 
         This function is querying data counters between methods calls and thus is the NVLink
@@ -1773,10 +1763,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         """
         return [tx for tx, _ in self.nvlink_throughput(interval=interval)]
 
-    def nvlink_mean_tx_throughput(
-        self,
-        interval: float | None = None,
-    ) -> int | NaType:  # in KiB/s
+    def nvlink_mean_tx_throughput(self, interval: float | None = None) -> int | NaType:  # in KiB/s
         """The mean NVLink transmit data throughput for all NVLinks in KiB/s.
 
         This function is querying data counters between methods calls and thus is the NVLink
@@ -1796,10 +1783,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         """
         return self.nvlink_mean_throughput(interval=interval).tx
 
-    def nvlink_total_tx_throughput(
-        self,
-        interval: float | None = None,
-    ) -> int | NaType:  # in KiB/s
+    def nvlink_total_tx_throughput(self, interval: float | None = None) -> int | NaType:  # in KiB/s
         """The total NVLink transmit data throughput for all NVLinks in KiB/s.
 
         This function is querying data counters between methods calls and thus is the NVLink
@@ -1819,10 +1803,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         """
         return self.nvlink_total_throughput(interval=interval).tx
 
-    def nvlink_rx_throughput(
-        self,
-        interval: float | None = None,
-    ) -> list[int | NaType]:  # in KiB/s
+    def nvlink_rx_throughput(self, interval: float | None = None) -> list[int | NaType]:  # in KiB/s
         """The current NVLink receive data throughput for each NVLink in KiB/s.
 
         This function is querying data counters between methods calls and thus is the NVLink
@@ -1842,10 +1823,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         """
         return [rx for _, rx in self.nvlink_throughput(interval=interval)]
 
-    def nvlink_mean_rx_throughput(
-        self,
-        interval: float | None = None,
-    ) -> int | NaType:  # in KiB/s
+    def nvlink_mean_rx_throughput(self, interval: float | None = None) -> int | NaType:  # in KiB/s
         """The mean NVLink receive data throughput for all NVLinks in KiB/s.
 
         This function is querying data counters between methods calls and thus is the NVLink
@@ -1865,10 +1843,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         """
         return self.nvlink_mean_throughput(interval=interval).rx
 
-    def nvlink_total_rx_throughput(
-        self,
-        interval: float | None = None,
-    ) -> int | NaType:  # in KiB/s
+    def nvlink_total_rx_throughput(self, interval: float | None = None) -> int | NaType:  # in KiB/s
         """The total NVLink receive data throughput for all NVLinks in KiB/s.
 
         This function is querying data counters between methods calls and thus is the NVLink
@@ -2214,7 +2189,8 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
                 libnvml.NVML_COMPUTEMODE_EXCLUSIVE_THREAD: 'Exclusive Thread',
                 libnvml.NVML_COMPUTEMODE_PROHIBITED: 'Prohibited',
                 libnvml.NVML_COMPUTEMODE_EXCLUSIVE_PROCESS: 'Exclusive Process',
-            }.get(libnvml.nvmlQuery('nvmlDeviceGetComputeMode', self.handle), NA)
+            }.get(libnvml.nvmlQuery('nvmlDeviceGetComputeMode', self._handle), NA)
+        return NA
 
     def cuda_compute_capability(self) -> tuple[int, int] | NaType:
         """The CUDA compute capability for the device.
@@ -2271,7 +2247,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
 
         mig_mode, *_ = libnvml.nvmlQuery(
             'nvmlDeviceGetMigMode',
-            self.handle,
+            self._handle,
             default=(NA, NA),
             ignore_function_not_found=True,
         )
@@ -2333,7 +2309,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
             ('C', 'nvmlDeviceGetComputeRunningProcesses'),
             ('G', 'nvmlDeviceGetGraphicsRunningProcesses'),
         ):
-            for p in libnvml.nvmlQuery(func, self.handle, default=()):
+            for p in libnvml.nvmlQuery(func, self._handle, default=()):
                 if isinstance(p.usedGpuMemory, int):
                     gpu_memory = p.usedGpuMemory
                 else:
@@ -2353,7 +2329,7 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         if len(processes) > 0:
             samples = libnvml.nvmlQuery(
                 'nvmlDeviceGetProcessUtilization',
-                self.handle,
+                self._handle,
                 # Only utilization samples that were recorded after this timestamp will be returned.
                 # The CPU timestamp, i.e. absolute Unix epoch timestamp (in microseconds), is used.
                 # Here we use the timestamp 1 second ago to ensure the record buffer is not empty.
@@ -2522,12 +2498,14 @@ class PhysicalDevice(Device):
 
         This method will return 0 if the device does not support MIG mode.
         """
-        return libnvml.nvmlQuery(
-            'nvmlDeviceGetMaxMigDeviceCount',
-            self.handle,
-            default=0,
-            ignore_function_not_found=True,
-        )
+        if self._handle is not None:
+            return libnvml.nvmlQuery(
+                'nvmlDeviceGetMaxMigDeviceCount',
+                self._handle,
+                default=0,
+                ignore_function_not_found=True,
+            )
+        return 0
 
     def mig_device(self, mig_index: int) -> MigDevice:
         """Return a child MIG device of the given index.
@@ -2671,7 +2649,7 @@ class MigDevice(Device):  # pylint: disable=too-many-instance-attributes
             self._handle = libnvml.nvmlQuery('nvmlDeviceGetHandleByUUID', uuid, ignore_errors=False)
             parent_handle = libnvml.nvmlQuery(
                 'nvmlDeviceGetDeviceHandleFromMigDeviceHandle',
-                self.handle,
+                self._handle,
                 ignore_errors=False,
             )
             parent_index = libnvml.nvmlQuery(
@@ -2719,10 +2697,10 @@ class MigDevice(Device):  # pylint: disable=too-many-instance-attributes
         Returns: Union[int, NaType]
             The gpu instance ID of the MIG device, or :const:`nvitop.NA` when not applicable.
         """
-        if self._gpu_instance_id is NA:
+        if self._handle is not None and self._gpu_instance_id is NA:
             self._gpu_instance_id = libnvml.nvmlQuery(
                 'nvmlDeviceGetGpuInstanceId',
-                self.handle,
+                self._handle,
                 default=UINT_MAX,
             )
             if self._gpu_instance_id == UINT_MAX:
@@ -2735,10 +2713,10 @@ class MigDevice(Device):  # pylint: disable=too-many-instance-attributes
         Returns: Union[int, NaType]
             The compute instance ID of the MIG device, or :const:`nvitop.NA` when not applicable.
         """
-        if self._compute_instance_id is NA:
+        if self._handle is not None and self._compute_instance_id is NA:
             self._compute_instance_id = libnvml.nvmlQuery(
                 'nvmlDeviceGetComputeInstanceId',
-                self.handle,
+                self._handle,
                 default=UINT_MAX,
             )
             if self._compute_instance_id == UINT_MAX:
@@ -2751,8 +2729,7 @@ class MigDevice(Device):  # pylint: disable=too-many-instance-attributes
         The attributes are defined in :attr:`SNAPSHOT_KEYS`.
         """
         snapshot = super().as_snapshot()
-        snapshot.mig_index = self.mig_index  # type: ignore[attr-defined]
-
+        snapshot.mig_index = self.mig_index
         return snapshot
 
     SNAPSHOT_KEYS: ClassVar[list[str]] = [
@@ -2872,7 +2849,7 @@ class CudaDevice(Device):
             - `CUDA Device Enumeration for MIG Device <https://docs.nvidia.com/datacenter/tesla/mig-user-guide/index.html#cuda-visible-devices>`_
 
         Args:
-            cuda_indices (Iterable[int]):
+            indices (Iterable[int]):
                 The indices of the GPU in CUDA ordinal, if not given, returns all visible CUDA devices.
 
         Returns: List[CudaDevice]
@@ -3002,8 +2979,7 @@ class CudaDevice(Device):
         The attributes are defined in :attr:`SNAPSHOT_KEYS`.
         """
         snapshot = super().as_snapshot()
-        snapshot.cuda_index = self.cuda_index  # type: ignore[attr-defined]
-
+        snapshot.cuda_index = self.cuda_index
         return snapshot
 
 
@@ -3222,7 +3198,7 @@ def _parse_cuda_visible_devices(
 ) -> list[str]: ...
 
 
-@functools.lru_cache()
+@functools.lru_cache
 def _parse_cuda_visible_devices(  # pylint: disable=too-many-branches,too-many-statements
     cuda_visible_devices: str | None = None,
     format: Literal['index', 'uuid'] = 'index',  # pylint: disable=redefined-builtin
@@ -3363,6 +3339,8 @@ def _parse_cuda_visible_devices_to_uuids(
             The value of the ``CUDA_VISIBLE_DEVICES`` variable. If not given, the value from the
             environment will be used. If explicitly given by :data:`None`, the ``CUDA_VISIBLE_DEVICES``
             environment variable will be unset before parsing.
+        verbose (bool):
+            Whether to raise an exception in the subprocess if failed to parse the ``CUDA_VISIBLE_DEVICES``.
 
     Returns: List[str]
         A list of device UUIDs without ``GPU-`` or ``MIG-`` prefixes.

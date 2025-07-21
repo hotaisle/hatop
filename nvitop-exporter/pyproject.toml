@@ -6,9 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "nvitop-exporter"
 description = "Prometheus exporter built on top of `nvitop`."
 readme = "README.md"
-requires-python = ">= 3.7"
+requires-python = ">= 3.8"
 authors = [{ name = "Xuehai Pan", email = "XuehaiPan@pku.edu.cn" }]
-license = { text = "Apache License, Version 2.0 (Apache-2.0)" }
+license = { text = "Apache-2.0" }
 keywords = [
     "nvidia",
     "nvidia-smi",
@@ -27,12 +27,13 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Environment :: GPU",
@@ -47,7 +48,7 @@ classifiers = [
 ]
 dependencies = [
     # Sync with nvitop/version.py and requirements.txt
-    "nvitop == 1.3.2",
+    "nvitop ~= 1.5.1",
     "prometheus-client >= 0.4.0",
 ]
 dynamic = ["version"]
@@ -63,22 +64,6 @@ Documentation = "https://nvitop.readthedocs.io"
 
 [tool.setuptools.packages.find]
 include = ["nvitop_exporter", "nvitop_exporter.*"]
-
-[tool.black]
-safe = true
-line-length = 100
-skip-string-normalization = true
-target-version = ["py37"]
-
-[tool.isort]
-atomic = true
-profile = "black"
-src_paths = ["nvitop_exporter"]
-known_first_party = ["nvitop", "nvitop_exporter"]
-indent = 4
-line_length = 100
-lines_after_imports = 2
-multi_line_output = 3
 
 [tool.ruff]
 extend = "../pyproject.toml"

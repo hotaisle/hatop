@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,9 +25,9 @@ import datetime
 import functools
 import os
 import threading
-from abc import ABCMeta
+from abc import ABC
 from types import FunctionType
-from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable
+from typing import TYPE_CHECKING, Any
 from weakref import WeakValueDictionary
 
 from nvitop.api import host, libnvml
@@ -43,12 +43,13 @@ from nvitop.api.utils import (
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Generator, Iterable
     from typing_extensions import Self  # Python 3.11+
 
     from nvitop.api.device import Device
 
 
-__all__ = ['HostProcess', 'GpuProcess', 'command_join']
+__all__ = ['GpuProcess', 'HostProcess', 'command_join']
 
 
 if host.POSIX:
@@ -94,8 +95,7 @@ def command_join(cmdline: list[str]) -> str:
     """Return a shell-escaped string from command line arguments."""
     if len(cmdline) == 1 and not (
         # May be modified by `setproctitle`
-        os.path.isfile(cmdline[0])
-        and os.path.isabs(cmdline[0])
+        os.path.isfile(cmdline[0]) and os.path.isabs(cmdline[0])
     ):
         return cmdline[0]
     return ' '.join(map(add_quotes, cmdline))
@@ -114,15 +114,15 @@ def auto_garbage_clean(
     raises an exception when falls.
     """
 
-    def wrapper(func: Callable[..., Any]) -> Callable[..., Any]:
+    def wrapper(func: Callable[..., Any], /) -> Callable[..., Any]:
         @functools.wraps(func)
-        def wrapped(self: GpuProcess, *args: Any, **kwargs: Any) -> Any:
+        def wrapped(self: GpuProcess, /, *args: Any, **kwargs: Any) -> Any:
             try:
                 return func(self, *args, **kwargs)
             except host.PsutilError as ex:
                 try:
                     with GpuProcess.INSTANCE_LOCK:
-                        del GpuProcess.INSTANCES[(self.pid, self.device)]
+                        del GpuProcess.INSTANCES[self.pid, self.device]
                 except (KeyError, AttributeError):
                     pass
                 try:
@@ -144,7 +144,7 @@ def auto_garbage_clean(
     return wrapper
 
 
-class HostProcess(host.Process, metaclass=ABCMeta):
+class HostProcess(host.Process, ABC):
     """Represent an OS process with the given PID.
 
     If PID is omitted current process PID (:func:`os.getpid`) is used. The instance will be cache
@@ -237,7 +237,7 @@ class HostProcess(host.Process, metaclass=ABCMeta):
 
     def __repr__(self) -> str:
         """Return a string representation of the process."""
-        return super().__repr__().replace(self.__class__.__module__ + '.', '', 1)
+        return super().__repr__().replace(f'{self.__class__.__module__}.', '', 1)
 
     def __reduce__(self) -> tuple[type[HostProcess], tuple[int]]:
         """Return state information for pickling."""
@@ -457,18 +457,16 @@ class GpuProcess:  # pylint: disable=too-many-instance-attributes,too-many-publi
     _ident: tuple
     _hash: int | None
 
-    # pylint: disable-next=too-many-arguments
+    # pylint: disable-next=too-many-arguments,unused-argument
     def __new__(
         cls,
         pid: int | None,
         device: Device,
         *,
-        # pylint: disable=unused-argument
         gpu_memory: int | NaType | None = None,
         gpu_instance_id: int | NaType | None = None,
         compute_instance_id: int | NaType | None = None,
         type: str | NaType | None = None,  # pylint: disable=redefined-builtin
-        # pylint: enable=unused-argument
     ) -> Self:
         """Return the cached instance of :class:`GpuProcess`."""
         if pid is None:
@@ -476,7 +474,7 @@ class GpuProcess:  # pylint: disable=too-many-instance-attributes,too-many-publi
 
         with cls.INSTANCE_LOCK:
             try:
-                instance = cls.INSTANCES[(pid, device)]
+                instance = cls.INSTANCES[pid, device]
                 if instance.is_running():
                     return instance  # type: ignore[return-value]
             except KeyError:
@@ -492,7 +490,7 @@ class GpuProcess:  # pylint: disable=too-many-instance-attributes,too-many-publi
             instance._hash = None
             instance._username = None
 
-            cls.INSTANCES[(pid, device)] = instance
+            cls.INSTANCES[pid, device] = instance
 
             return instance
 

@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,9 +18,12 @@
 # pylint: disable=missing-module-docstring,missing-function-docstring
 # pylint: disable=unused-argument,attribute-defined-outside-init
 
+# mypy: ignore-errors
+
 from __future__ import annotations
 
 import time
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from lightning.pytorch.callbacks import Callback  # pylint: disable=import-error
@@ -97,6 +100,14 @@ class GpuStatsLogger(Callback):  # pylint: disable=too-many-instance-attributes
         fan_speed: bool = False,
         temperature: bool = False,
     ) -> None:
+        warnings.warn(
+            f'The class `{__name__}.{self.__class__.__name__}` is deprecated '
+            'and will not be supported in the future. '
+            'Feel free to port and implement your own callback using `nvitop`.',
+            category=FutureWarning,
+            stacklevel=2,
+        )
+
         super().__init__()
 
         try:

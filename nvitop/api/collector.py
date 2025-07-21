@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import os
 import threading
 import time
 from collections import OrderedDict, defaultdict
-from typing import Callable, ClassVar, Generator, Iterable, NamedTuple, TypeVar
+from typing import TYPE_CHECKING, ClassVar, NamedTuple, TypeVar
 from weakref import WeakSet
 
 from nvitop.api import host
@@ -34,7 +34,11 @@ from nvitop.api.process import GpuProcess, HostProcess
 from nvitop.api.utils import GiB, MiB, Snapshot
 
 
-__all__ = ['take_snapshots', 'collect_in_background', 'ResourceMetricCollector']
+if TYPE_CHECKING:
+    from collections.abc import Callable, Generator, Iterable
+
+
+__all__ = ['ResourceMetricCollector', 'collect_in_background', 'take_snapshots']
 
 
 class SnapshotResult(NamedTuple):  # pylint: disable=missing-class-docstring
@@ -48,7 +52,7 @@ timer = time.monotonic
 _T = TypeVar('_T')
 
 
-def _unique(iterable: Iterable[_T]) -> list[_T]:
+def _unique(iterable: Iterable[_T], /) -> list[_T]:
     return list(OrderedDict.fromkeys(iterable).keys())
 
 
@@ -256,19 +260,19 @@ def collect_in_background(
 
     def target() -> None:
         if on_start is not None:
-            on_start(collector)  # type: ignore[arg-type]
+            on_start(collector)
         try:
-            with collector(tag):  # type: ignore[misc]
+            with collector(tag):
                 try:
-                    next_snapshot = timer() + interval  # type: ignore[operator]
-                    while on_collect(collector.collect()):  # type: ignore[union-attr]
+                    next_snapshot = timer() + interval
+                    while on_collect(collector.collect()):
                         time.sleep(max(0.0, next_snapshot - timer()))
-                        next_snapshot += interval  # type: ignore[operator]
+                        next_snapshot += interval
                 except KeyboardInterrupt:
                     pass
         finally:
             if on_stop is not None:
-                on_stop(collector)  # type: ignore[arg-type]
+                on_stop(collector)
 
     daemon = threading.Thread(target=target, name=tag, daemon=True)
     daemon.collector = collector  # type: ignore[attr-defined]
@@ -395,6 +399,7 @@ class ResourceMetricCollector:  # pylint: disable=too-many-instance-attributes
     def __init__(
         self,
         devices: Iterable[Device] | None = None,
+        *,
         root_pids: Iterable[int] | None = None,
         interval: float = 1.0,
     ) -> None:
@@ -774,6 +779,7 @@ class _MetricBuffer:  # pylint: disable=missing-class-docstring,missing-function
         self,
         tag: str,
         collector: ResourceMetricCollector,
+        *,
         prev: _MetricBuffer | None = None,
     ) -> None:
         self.collector: ResourceMetricCollector = collector

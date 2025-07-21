@@ -1,6 +1,6 @@
 # This file is part of nvitop, the interactive NVIDIA-GPU process viewer.
 #
-# Copyright 2021-2024 Xuehai Pan. All Rights Reserved.
+# Copyright 2021-2025 Xuehai Pan. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ def cprint(text: str = '', *, file: TextIO | None = None) -> None:
         if text.startswith(prefix):
             text = text.replace(
                 prefix.rstrip(),
-                colored(prefix.rstrip(), color=color, attrs=('bold',)),
+                colored(prefix.rstrip(), color=color, attrs=('bold',)),  # type: ignore[arg-type]
                 1,
             )
     print(text, file=file)

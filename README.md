@@ -1,4 +1,6 @@
-# nvitop
+# hatop
+
+This is a fork of [nvitop](https://github.com/XuehaiPan/nvitop) that adds ROCm support
 
 <!-- markdownlint-disable html -->
 

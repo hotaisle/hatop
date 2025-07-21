@@ -211,10 +211,14 @@ class DevicePanel(BasePanel):  # pylint: disable=too-many-instance-attributes
         if compact is None:
             compact = self.compact
 
+        # Check if we're using AMD GPUs
+        is_amd = Device.is_amd()
+        driver_label = 'ROCm' if is_amd else 'CUDA Driver Version'
+        
         version_infos = [
             'NVITOP {}'.format(__version__.partition('+')[0]),
-            f'Driver Version: {self.driver_version}',
-            f'CUDA Driver Version: {self.cuda_driver_version}',
+            f'Driver: {self.driver_version}',
+            f'{driver_label}: {self.cuda_driver_version}',
         ]
         if sum(len(v) for v in version_infos) % 2 == 0:
             version_infos[0] += ' '

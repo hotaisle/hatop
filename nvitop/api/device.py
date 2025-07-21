@@ -346,7 +346,9 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
                 driver without reloading the kernel module.
         """
         if Device.is_amd():
-            return NA
+            # For AMD GPUs, return the ROCm version instead
+            rocm_version = libasmi.get_rocm_version()
+            return rocm_version if rocm_version != "Unknown" else NA
         
         cuda_driver_version = libnvml.nvmlQuery('nvmlSystemGetCudaDriverVersion')
         if libnvml.nvmlCheckReturn(cuda_driver_version, int):
@@ -898,7 +900,8 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         """
         if self._name is NA:
             if self.is_amd():
-                self._name = libasmi.get_device_name(self._asmi_index)
+                name = libasmi.get_device_name(self._asmi_index)
+                self._name = name if name is not None else NA
             else:
                 self._name = libnvml.nvmlQuery('nvmlDeviceGetName', self.handle)
         return self._name
@@ -919,7 +922,8 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         """
         if self._uuid is NA:
             if self.is_amd():
-                self._uuid = libasmi.get_uuid(self._asmi_index)
+                uuid = libasmi.get_uuid(self._asmi_index)
+                self._uuid = uuid if uuid is not None else NA
             else:
                 self._uuid = libnvml.nvmlQuery('nvmlDeviceGetUUID', self.handle)
         return self._uuid
@@ -938,7 +942,8 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         """
         if self._bus_id is NA:
             if self.is_amd():
-                self._bus_id = libasmi.get_bdf(self._asmi_index)
+                bdf = libasmi.get_bdf(self._asmi_index)
+                self._bus_id = bdf if bdf is not None else NA
             else:
                 self._bus_id = libnvml.nvmlQuery(
                     lambda handle: libnvml.nvmlDeviceGetPciInfo(handle).busId,
@@ -972,9 +977,12 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
             A named tuple with memory information, the item could be :const:`nvitop.NA` when not applicable.
         """
         if self.is_amd():
-            used, total = libasmi.get_memory_info(self._asmi_index)
-            free = total - used
-            return MemoryInfo(total=total, free=free, used=used) # This function affects the MEM in the chart
+            result = libasmi.get_memory_info(self._asmi_index)
+            if result is not None:
+                used, total = result
+                free = total - used
+                return MemoryInfo(total=total, free=free, used=used) # This function affects the MEM in the chart
+            return MemoryInfo(total=NA, free=NA, used=NA)
         else:
             memory_info = libnvml.nvmlQuery('nvmlDeviceGetMemoryInfo', self.handle)
             if libnvml.nvmlCheckReturn(memory_info):
@@ -1164,6 +1172,11 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         gpu, memory, encoder, decoder = NA, NA, NA, NA
         if self.is_amd():
             gpu, memory = libasmi.get_utilization_rates(self._asmi_index)
+            # Convert -1 to NA for error cases
+            if gpu == -1:
+                gpu = NA
+            if memory == -1:
+                memory = NA
         else:
             utilization_rates = libnvml.nvmlQuery('nvmlDeviceGetUtilizationRates', self.handle)
             if libnvml.nvmlCheckReturn(utilization_rates):
@@ -1490,7 +1503,8 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
             $(( "$(nvidia-smi --id=<IDENTIFIER> --format=csv,noheader,nounits --query-gpu=power.limit)" * 1000 ))
         """
         if self.is_amd():
-            return libasmi.get_power_cap(self._asmi_index) * 1000
+            # AMD SMI already returns power cap in milliwatts
+            return libasmi.get_power_cap(self._asmi_index)
         else:
             return libnvml.nvmlQuery('nvmlDeviceGetPowerManagementLimit', self.handle)
 
@@ -2302,6 +2316,16 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
         """
         processes = {}
         if self.is_amd():
+            # Get AMD GPU processes
+            process_list = libasmi.get_processes(self._asmi_index)
+            if process_list:
+                for pid, gpu_memory in process_list:
+                    processes[pid] = self.GPU_PROCESS_CLASS(
+                        pid=pid,
+                        gpu_memory=gpu_memory,
+                        device=self,
+                        type='C',  # Compute process
+                    )
             return processes
         
         found_na = False
@@ -2352,8 +2376,6 @@ class Device:  # pylint: disable=too-many-instance-attributes,too-many-public-me
 
         The attributes are defined in :attr:`SNAPSHOT_KEYS`.
         """
-        import logging
-        logging.error(f"snapshot {self.index} {self.handle} {self.physical_index}")
         with self.oneshot():
             return Snapshot(
                 real=self,
